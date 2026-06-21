@@ -1,27 +1,17 @@
-import socket
-import threading
-import json
+class GameState:
+    def __init__(self):
+        self.players = {}
+        self.entities = {}
 
-class NetworkManager:
-    def __init__(self, port):
-        self.port = port
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.bind(("localhost", port))
-        self.peers = []  # lista de (ip, port)
+    def update_player(self, player_id, data):
+        self.players[player_id] = data
 
-    def start_listening(self, callback):
-        thread = threading.Thread(target=self.listen, args=(callback,))
-        thread.start()
+    def apply_event(self, event):
+        # lógica do jogo
+        pass
 
-    def listen(self, callback):
-        while True:
-            data, addr = self.sock.recvfrom(4096)
-            message = json.loads(data.decode())
-            callback(message, addr)
-
-    def send(self, message, addr):
-        self.sock.sendto(json.dumps(message).encode(), addr)
-
-    def broadcast(self, message):
-        for peer in self.peers:
-            self.send(message, peer)
+    def resolve_conflict(self, event1, event2):
+        # timestamp + ID
+        if event1["timestamp"] > event2["timestamp"]:
+            return event1
+        return event2
