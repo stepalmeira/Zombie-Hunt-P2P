@@ -4,9 +4,8 @@ Repositório do projeto desenvolvido na disciplina Desenvolvimento de Sistemas d
 ## 🃏 Dinâmica do Jogo
 Nosso projeto se baseia nas regras do jogo Zombie Hunt, como explicadas no episódio 2 da 3ª terporada de Alice in Borderland.
 
-[![Vídeo regras do Jogo Zombie Hunt](assets/thumbnail.png)](https://www.youtube.com/watch?v=p1aUgwMgKhU)
+[![Vídeo regras do Jogo Zombie Hunt | YouTube](assets/thumbnail.png)](https://www.youtube.com/watch?v=p1aUgwMgKhU)
 
-<video src="assets/video_regras_do_jogo.mp4" controls="controls" style="max-width: 100%;"> </video>
 
 Um número par de jogadores se conectam ao jogo. No início do jogo, são distribuídas 7 cartas numéricas (cartas de baralho, de Às a Reis) e 1 carta especial obrigatória para cada jogador. Essa carta especial pode ser de três tipos: 
 - Zumbi
