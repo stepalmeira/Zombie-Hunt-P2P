@@ -2,10 +2,11 @@
 Repositório do projeto desenvolvido na disciplina Desenvolvimento de Sistemas de Informação Distribuídos | EACH USP (2026). O projeto trata-se de um jogo multiplayer inspirado no jogo “Zombie Hunt” da série Alice in Borderland, implementado em arquitetura peer-to-peer, no qual os jogadores se conectam diretamente sem servidor central.
 
 ## 🃏 Dinâmica do Jogo
-Nosso projeto se baseia nas regras do jogo Zombie Hunt, como explicadas no episódio 3 da 3ª terporada de Alice in Borderland.
+Nosso projeto se baseia nas regras do jogo Zombie Hunt, como explicadas no episódio 2 da 3ª terporada de Alice in Borderland.
 
-<video src="assets/video_regras_do_jogo.mp4" controls></video>
+[![Vídeo regras do Jogo Zombie Hunt](assets/thumbnail.png)](https://www.youtube.com/watch?v=p1aUgwMgKhU)
 
+<video src="assets/video_regras_do_jogo.mp4" controls="controls" style="max-width: 100%;"> </video>
 
 Um número par de jogadores se conectam ao jogo. No início do jogo, são distribuídas 7 cartas numéricas (cartas de baralho, de Às a Reis) e 1 carta especial obrigatória para cada jogador. Essa carta especial pode ser de três tipos: 
 - Zumbi
