@@ -70,5 +70,5 @@ Caso ambos joguem cartas do mesmo valor, ninguém vence a rodada, apenas perdem 
 
 ## 👨‍💻 Autores
  
-- [Stefanie Palmeira](https://github.com/stepalmeira)
+- [Stefanie Santos](https://github.com/stepalmeira)
 - [Pedro Nunes](https://github.com/pedr0nunes)
