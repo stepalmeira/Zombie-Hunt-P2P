@@ -6,16 +6,23 @@ Nosso projeto se baseia nas regras do jogo Zombie Hunt, como explicadas no epis�
 
 [![Vídeo regras do Jogo Zombie Hunt | YouTube](assets/thumbnail.png)](https://www.youtube.com/watch?v=p1aUgwMgKhU)
 
+
 Um número N de participantes se conectam simultaneamente. Para cada participante é sorteado um papel no início do jogo: **Zumbi**, **Caçador**, **Médico** ou **Civil**, que deve ser mantido em segredo. Cada jogador inicia com um deck de cartas numeradas de 1 a 10. A cada rodada, uma dupla de jogadores é sorteada para batalharem entre si. A batalha consiste na escolha de uma carta de seu deck, vence o jogador que lançar a carta de maior valor. As possibilidades de ataque são:
 
 - **Zumbi vence de Humano (Caçador/Médico/Civil)** → O Humano se torna um zumbi.
 - **Caçador vence de Zumbi** → O zumbi morre.
-- **Médico vence de Zumbi** → O zumbi se torna humano.
+- **Médico vence de Zumbi** → O zumbi se torna Civil.
 - **Civil vence qualquer um (Zumbi/Médico/Caçador/Civil)** → Nada acontece, ambos permanecem vivos.
 - **Caçador vence outro Humano (Médico/Civil)** → O Médico/Civil morre.
 - **Médico vence outro Humano (Civil/Caçador)** → Nada acontece, ambos permanecem vivos.
+- **Dois jogadores do mesmo papel se enfrentam** → O perdedor perde apenas a carta jogada. (exemplo: Zumbi vs Zumbi ou Caçador vs Caçador resulta apenas em perda de carta).
 
 Caso ambos joguem cartas do mesmo valor, ninguém vence a rodada, apenas perdem do deck a carta lançada. Ao final de cada rodada, é revelado a todos o número de zumbis e humanos vivos. A partida termina quando um time tiver dizimado completamente o outro ou ao final de 10 rodadas, quando todos os jogadores já usaram todas as suas cartas. O time que tiver mais sobreviventes (Humanos vs. Zumbis), vence.
+
+<p align="center">
+  <img src="assets/personagens.png" alt="Alt text" width="500">
+</p>
+
 
 ---
 
@@ -32,6 +39,7 @@ Caso ambos joguem cartas do mesmo valor, ninguém vence a rodada, apenas perdem 
 - Envio das mensagens pela rede será **assíncrono**, ou seja, não bloqueante.
 - Usaremos **conexões duradouras** entre os nós durante toda a partida.
 - O **formato de mensagens** entre os peers (estado do jogo, ataque, etc) será **JSON**.
+- Para a fase de **conexão inicial**, o primeiro peer será, a princípio, o "nó anfitrião", ele começa rodando o jogo e será o ID 0.  Os outros jogadores se conectam inicialmente apenas ao IP do anfitrião. Quando o anfitrião seleciona "Iniciar Jogo", ele envia um JSON para todos contendo a tabela com a lista completa de IPs, portas e IDs de todos os conectados. A partir desse momento, os nós usam a lista para abrir conexões TCP diretas entre si, formando a malha P2P e dispensando o anfitrião de qualquer papel especial no jogo.
 
 
 ## 🧵 Processos
