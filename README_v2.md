@@ -49,7 +49,7 @@ Caso ambos joguem cartas do mesmo valor, ninguém vence a rodada, apenas perdem 
 
 ## 🕑️ Coordenação
 - Vamos usar o método de **sincronização de barreira** para **sincronizar** os resultados das batalhas ao final de cada rodada, garantindo que o jogo só passa pra rodada 2 depois que todos terminarem os duelos da rodada 1.
-- Usaremos um **algoritmo de consenso decentralizado baseado em semente**: Cada peer gera um valor aleatório que é somado e, do valor resultante (a semente), é calculado o módulo, que garantidamente será um valor entre 0 e N-1 (sendo N o número de jogadores da partida), permitindo selecionar um jogador de forma aleatória e confiável.
+- Para a eleição do líder, utilizamos o princípio de que, quando um processo percebe que o coordenador não está mais respondendo, ele inicia uma eleição. Implementamos uma versão simples onde todos conhecem os IDs de todos os processos no sistema, e o processo vivo com o menor ID (maior prioridade na nossa regra) assume como novo coordenador.
 
 
 ## ☝️ Nomeação
@@ -64,9 +64,12 @@ Caso ambos joguem cartas do mesmo valor, ninguém vence a rodada, apenas perdem 
 - 
 
 ## 🚧 Tolerância a falhas
-- Utilizaremos **timeouts** para evitar que a queda ou lentidão não congele a partida. Se um jogador não enviar sua carta dentro do tempo limite da jogada, o adversário vence por WO (sem gastar nenhuma carta de seu deck) e a queda é reportada pra rede.
-- Em caso de **crash** (peer desconectar no meio da partida), o sistema marca o jogador como “Eliminado” se der timeout.
-- Para lidar com **falhas bizantinas**, aplicamos o protocolo "Commit-Reveal": No momento do duelo, assim que um jogador escolhe sua carta, é gerada localmente uma palavra aleatória (salt) que é combinada ao valor da carta escolhida e passada por uma função de hash (gerando um código único inacessível), que é então enviado para o adversário. Apenas após os dois jogadores já terem recebido esse código um do outro, o valor real da carta e o salt de cada um são revelados para o oponente, que valida a jogada (recalculando o hash) e revela o vencedor do duelo sem risco de manipulação por parte de um peer malicioso.
+- O sistema tolerará Falhas de parada (crash): situações em que um componente para de funcionar bruscamente (como um usuário fechando o jogo), mas funcionava corretamente até parar.
+- Detecção de Falhas por Sondagem: Como uma detecção de falhas puramente baseada em tempo de resposta do usuário prejudicaria a dinâmica do jogo, o sistema adotará a técnica de sondagem (Probing). Periodicamente, um processo $P$ envia uma requisição "PING" ao processo $Q$ esperando uma reação TCP. Se $Q$ não reagir à sondagem (timeout de rede super curto, indicando que a porta TCP do processo não está mais ouvindo), então $Q$ é suspeito de ter travado ou desconectado e é dado como eliminado. Isso permite que os jogadores levem o tempo que for necessário para escolherem suas cartas sem travar a barreira global.
+- Caso o oponente caia no meio do duelo, a falha é detectada pela sondagem e a vitória é decretada por WO, sendo repassada ao Líder da rodada.
+- Para proteger o sistema contra Falhas arbitrárias e maliciosas (Bizantinas), aplicaremos técnicas de criptografia visando proteger a integridade dos dados durante os duelos.
+- O duelo implementa o protocolo de compromisso (Commit-Reveal) baseado em Funções de Hash.
+- A jogada é processada em uma função hash segura gerando uma cadeia de tamanho fixo, de forma que qualquer mudança na carta gere uma saída completamente diferente (resistência à colisão). É computacionalmente inviável deduzir a carta escolhida a partir do hash exposto antes do final da rodada
 
 <!--
 

@@ -1,7 +1,7 @@
-# arquivo: main.py
 import sys
 import time
 import socket
+import random
 from jogador import Jogador
 from rede import GerenciadorDeRede
 from jogo import MotorDoJogo
@@ -9,239 +9,291 @@ from jogo import MotorDoJogo
 IP_LOCAL = "127.0.0.1"
 PORTA_PADRAO_LOBBY = 5000
 
-# Tenta conectar na porta padrão (5000) da rede local. Se conseguir, já existe um anfitrião
 def verificar_se_existe_anfitriao():
-    """Tenta conectar na porta padrão (5000) da rede local. Se conseguir, já existe um anfitrião"""
-
-    teste_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    teste_socket.settimeout(0.5) # Espera no máximo meio segundo
+    teste = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    teste.settimeout(0.5)
     try:
-        teste_socket.connect((IP_LOCAL, PORTA_PADRAO_LOBBY))
-        teste_socket.close()
-        return True # Conectou, portanto, já existe um anfitrião ativo
-    except (ConnectionRefusedError, socket.timeout):
-        return False # Não conectou. Eu serei o anfitrião
-    
+        teste.connect((IP_LOCAL, PORTA_PADRAO_LOBBY))
+        teste.close()
+        return True
+    except: return False
+
+def iniciar_eleicao(jogador, rede):
+    print("\n[SISTEMA] Lider caiu. Iniciando eleicao...")
+    if jogador.id_lider in jogador.tabela_peers:
+        jogador.tabela_peers[jogador.id_lider]["status"] = "ELIMINADO"
+        
+    vivos = [pid for pid, d in jogador.tabela_peers.items() if d["status"] == "VIVO"]
+    if jogador.status == "VIVO": vivos.append(jogador.id)
+    if not vivos: sys.exit()
+        
+    novo_lider = min(vivos)
+    jogador.id_lider = novo_lider
+    print(f"[ELEICAO] Novo lider eleito: ID {novo_lider}")
 
 def executar_rodada(jogador, rede, rodada):
-    print("\n" + "="*50)
-    print(f"🔄 INICIANDO RODADA {rodada} | Suas Cartas: {jogador.deck}")
-    print("="*50)
+    print(f"\n--- RODADA {rodada} --- Suas Cartas: {jogador.deck}")
     
-    # 1. Sorteio determinístico (todos fazem o mesmo cálculo e concordam)
-    duplas, folga = MotorDoJogo.formar_duplas(jogador.tabela_peers, rodada)
-    
-    # Verifica quem é o meu adversário nesta rodada
-    meu_adversario = None
-    for p1, p2 in duplas:
-        if p1 == jogador.id: meu_adversario = p2
-        elif p2 == jogador.id: meu_adversario = p1
+    # 1. LÍDER FORMA AS DUPLAS
+    if jogador.id == jogador.id_lider:
+        tabela_temp = dict(jogador.tabela_peers)
+        tabela_temp[jogador.id] = {"ip": IP_LOCAL, "porta": jogador.porta, "status": jogador.status}
+        duplas, folga = MotorDoJogo.formar_duplas(tabela_temp)
         
-    if jogador.id == folga:
-        print("☕ Você ficou de FOLGA nesta rodada (número ímpar de jogadores vivos)!")
-    elif meu_adversario is None or jogador.status != "VIVO":
-        print("💀 Você está eliminado e apenas assistirá à rodada.")
+        # Adiciona o número da rodada na mensagem para validação
+        msg_ordem = {"tipo": "ORDEM_RODADA", "rodada": rodada, "duplas": duplas, "folga": folga}
+        rede.ordem_rodada = msg_ordem 
+        
+        for pid, d in jogador.tabela_peers.items():
+            if pid != jogador.id and d["status"] == "VIVO":
+                rede.enviar_json(d["ip"], d["porta"], msg_ordem)
+                
+    # 2. TODOS AGUARDAM A ORDEM DO LÍDER PARA A RODADA ATUAL
+    while rede.ordem_rodada is None or rede.ordem_rodada.get("rodada") != rodada:
+        if jogador.id_lider in jogador.tabela_peers:
+            lider = jogador.tabela_peers[jogador.id_lider]
+            if not rede.esta_vivo(lider["ip"], lider["porta"]):
+                iniciar_eleicao(jogador, rede)
+                return executar_rodada(jogador, rede, rodada)
+        time.sleep(0.5)
+        
+    ordem = rede.ordem_rodada
+    rede.ordem_rodada = None # Zera a ordem somente APÓS consumir
+    
+    meu_adv = None
+    for p1, p2 in ordem["duplas"]:
+        if p1 == jogador.id: meu_adv = p2
+        elif p2 == jogador.id: meu_adv = p1
+        
+    # 3. DUELO P2P
+    if jogador.id == ordem["folga"] or jogador.status != "VIVO" or meu_adv is None:
+        print("> Voce esta de folga ou eliminado nesta rodada.")
     else:
-        adv_dados = jogador.tabela_peers[meu_adversario]
-        print(f"⚔️ SEU DUELO: Você (ID {jogador.id}) vs. Jogador ID {meu_adversario}")
+        adv_dados = jogador.tabela_peers[meu_adv] if meu_adv != jogador.id else {"ip": IP_LOCAL, "porta": jogador.porta}
+        print(f"> DUELO: Voce (ID {jogador.id}) vs ID {meu_adv}")
         
-        # 2. Escolha da carta (Interativo no terminal)
         while True:
             try:
-                escolha = int(input(f"Escolha uma carta do seu deck {jogador.deck}: "))
+                escolha = int(input("Escolha uma carta: "))
                 if escolha in jogador.deck:
                     minha_carta = escolha
                     jogador.deck.remove(escolha)
                     break
-                print("❌ Carta inválida ou já utilizada!")
+                else:
+                    print("> Carta invalida! Escolha uma carta presente no seu deck.")
             except ValueError:
-                print("❌ Digite apenas o número da carta!")
+                print("> Entrada invalida! Digite apenas o numero de uma carta.")
+            except (KeyboardInterrupt, EOFError):
+                print("\n\n[SISTEMA] Peer desconectado forçadamente (Ctrl + C).")
+                import os
+                os._exit(0)
                 
-        # 3. FASE COMMIT (Envelope Lacrado)
-        hash_jogada, salt = jogador.gerar_commit_jogada(minha_carta)
-        msg_commit = {"tipo": "COMMIT", "de": jogador.id, "hash_jogada": hash_jogada}
+        # Checa se o adversário ainda está vivo antes de trocar mensagens
+        if not rede.esta_vivo(adv_dados["ip"], adv_dados["porta"]):
+            print(f"\n[SISTEMA] Oponente (ID {meu_adv}) desconectou! VITORIA POR W.O.!")
+            jogador.tabela_peers[meu_adv]["status"] = "ELIMINADO"
+        else:
+            # Tenta enviar o COMMIT
+            hash_jogada, salt = jogador.gerar_commit_jogada(minha_carta)
+            rede.enviar_json(adv_dados["ip"], adv_dados["porta"], {"tipo": "COMMIT", "hash_jogada": hash_jogada})
+            
+            # Aguarda COMMIT do oponente
+            while rede.commit_recebido is None:
+                if not rede.esta_vivo(adv_dados["ip"], adv_dados["porta"]):
+                    break
+                time.sleep(0.5)
+                
+            if rede.commit_recebido is None:
+                print(f"\n[SISTEMA] Oponente (ID {meu_adv}) desconectou! VITORIA POR W.O.!")
+                jogador.tabela_peers[meu_adv]["status"] = "ELIMINADO"
+            else:
+                # Tenta enviar o REVEAL
+                rede.enviar_json(adv_dados["ip"], adv_dados["porta"], {
+                    "tipo": "REVEAL", 
+                    "carta": minha_carta, 
+                    "salt": salt, 
+                    "papel": jogador.papel_secreto
+                })
+                
+                while rede.reveal_recebido is None:
+                    if not rede.esta_vivo(adv_dados["ip"], adv_dados["porta"]):
+                        break
+                    time.sleep(0.5)
+                    
+                adv_reveal = rede.reveal_recebido
+                rede.commit_recebido = rede.reveal_recebido = None
+                
+                if adv_reveal:
+                    res, consq = MotorDoJogo.resolver_combate(jogador.papel_secreto, adv_reveal["papel"], minha_carta, adv_reveal["carta"])
+                    
+                    # Constrói mensagem de texto amigável baseada na consequência
+                    msg_consequencia = ""
+                    if res == "PERDEU":
+                        if consq == "MORRER": 
+                            jogador.status = "ELIMINADO"
+                            msg_consequencia = "Voce foi eliminado da partida!"
+                        elif consq == "VIRAR_ZUMBI": 
+                            jogador.papel_secreto = "Zumbi"
+                            msg_consequencia = "Voce foi infectado e agora e um Zumbi! 🧟"
+                        elif consq == "VIRAR_CIVIL": 
+                            jogador.papel_secreto = "Civil"
+                            msg_consequencia = "Acorda, cara!! Voce foi curado pelo medico e agora e um civil! 🧍"
+                        else:
+                            msg_consequencia = "Mas nao se preocupe, voce continua vivo e nao foi afetado."
+                    elif res == "VENCEU":
+                        if consq == "MORRER":
+                            msg_consequencia = "Arrasou! Voce atacou um Zumbi e ele foi eliminado"
+                        elif consq == "VIRAR_ZUMBI":
+                            msg_consequencia = "Voce infectou o oponente! Agora ele virou zumbi! 🧟"
+                        elif consq == "VIRAR_CIVIL":
+                            msg_consequencia = "Arrasou! Voce curou um zumbi! Agora ele eh um civil! 🩺"
+                        else:
+                            msg_consequencia = "Sua vitoria foi limpa e sem alteracoes de papéis."
+                    else:  # EMPATOU
+                        msg_consequencia = "Cartas iguais! Nada mudou nesta rodada."
+                    
+                    print(f"\n> RESULTADO: Voce {res} o duelo! (Sua: {minha_carta} | Oponente: {adv_reveal['carta']})")
+                    print(f"> {msg_consequencia}")
+                    
+    # 4. SINCRONIZAÇÃO DE BARREIRA
+    resultado_parcial = {"id": jogador.id, "status": jogador.status, "papel": jogador.papel_secreto}
+    if jogador.id == jogador.id_lider:
+        rede.resultados_rodada.append(resultado_parcial)
+    else:
+        lider_dados = jogador.tabela_peers.get(jogador.id_lider)
+        if not lider_dados or not rede.enviar_json(lider_dados["ip"], lider_dados["porta"], {"tipo": "RESULTADO_DUELO", **resultado_parcial}, timeout=2):
+            iniciar_eleicao(jogador, rede)
+            lider_dados = jogador.tabela_peers[jogador.id_lider]
+            rede.enviar_json(lider_dados["ip"], lider_dados["porta"], {"tipo": "RESULTADO_DUELO", **resultado_parcial})
+
+    if jogador.id == jogador.id_lider:
+        vivos = [pid for pid, d in jogador.tabela_peers.items() if d["status"] == "VIVO"]
+        if jogador.status == "VIVO" and jogador.id not in vivos: 
+            vivos.append(jogador.id)
         
-        print("🔒 Enviando seu commit (jogada lacrada) para o adversário...")
-        rede.enviar_json(adv_dados["ip"], adv_dados["porta"], msg_commit)
-        
-        # Aguarda receber o commit do oponente
-        print("⏳ Aguardando a jogada do adversário...")
-        tempo_limite = time.time() + 15 # 15 segundos de timeout
-        while rede.commit_recebido is None:
-            if time.time() > tempo_limite:
-                print("⏰ TIMEOUT: O adversário demorou para jogar! Você venceu por WO.")
-                # Reporta queda para a rede
-                msg_queda = {"tipo": "ATUALIZAR_ESTADO", "id": meu_adversario, "novo_status": "ELIMINADO"}
-                for p in jogador.tabela_peers.values():
-                    rede.enviar_json(p["ip"], p["porta"], msg_queda)
-                return
+        while True:
+            ids_recebidos = {r["id"] for r in rede.resultados_rodada}
+            faltantes = [pid for pid in vivos if pid not in ids_recebidos]
+            
+            if not faltantes:
+                break # Todos responderam!
+                
+            for pid in faltantes:
+                d = jogador.tabela_peers[pid]
+                if not rede.esta_vivo(d["ip"], d["porta"]):
+                    print(f"\n[LIDER] Peer ID {pid} desconectou. Marcando como ELIMINADO.")
+                    jogador.tabela_peers[pid]["status"] = "ELIMINADO"
+                    rede.resultados_rodada.append({"id": pid, "status": "ELIMINADO", "papel": d.get("papel_conhecido", "Civil")})
+            
+            vivos = [pid for pid, d in jogador.tabela_peers.items() if d["status"] == "VIVO"]
             time.sleep(0.5)
             
-        print("📩 Commit do adversário recebido! Abrindo os envelopes (Reveal)...")
+        for res in rede.resultados_rodada:
+            if res["id"] in jogador.tabela_peers:
+                jogador.tabela_peers[res["id"]]["status"] = res["status"]
+                jogador.tabela_peers[res["id"]]["papel_conhecido"] = res["papel"]
+        rede.resultados_rodada.clear()
         
-        # 4. FASE REVEAL (Revelar Carta real e Salt)
-        msg_reveal = {
-            "tipo": "REVEAL",
-            "de": jogador.id,
-            "carta": minha_carta,
-            "salt": salt,
-            "papel": jogador.papel_secreto,
-            "senha_papel": jogador.senha_do_papel
-        }
-        rede.enviar_json(adv_dados["ip"], adv_dados["porta"], msg_reveal)
-        
-        # Aguarda o reveal do oponente
-        while rede.reveal_recebido is None:
+        msg_sync = {"tipo": "ATUALIZAR_TABELA", "tabela": jogador.tabela_peers}
+        for pid, d in jogador.tabela_peers.items():
+            if pid != jogador.id and d["status"] == "VIVO":
+                rede.enviar_json(d["ip"], d["porta"], msg_sync)
+    else:
+        while not rede.tabela_atualizada:
+            if not rede.esta_vivo(jogador.tabela_peers[jogador.id_lider]["ip"], jogador.tabela_peers[jogador.id_lider]["porta"]):
+                iniciar_eleicao(jogador, rede)
+                break
             time.sleep(0.5)
-            
-        adv_reveal = rede.reveal_recebido
+        rede.tabela_atualizada = False
         
-        # 5. VALIDAÇÃO ANTITRAPAÇA (Falha Bizantina!)
-        hash_recalculado = jogador.gerar_hash(f"{adv_reveal['carta']}_{adv_reveal['salt']}")
-        if hash_recalculado != rede.commit_recebido:
-            print("🚨 ALERTA BIZANTINO: O adversário tentou trapacear trocando a carta! Eliminado por fraude.")
-            return
-            
-        # 6. RESOLUÇÃO DO COMBATE
-        print(f"\n🃏 Revelação: Você jogou [{minha_carta}] | Oponente jogou [{adv_reveal['carta']}]")
-        print(f"🎭 Papel do adversário revelado: {adv_reveal['papel']}")
-        
-        resultado, consequencia = MotorDoJogo.resolver_combate(
-            jogador.papel_secreto, adv_reveal["papel"], minha_carta, adv_reveal["carta"]
-        )
-        
-        print(f"🏁 Resultado do Duelo: Você {resultado}!")
-        
-        # Aplica consequências
-        if consequencia == "MORRER" and resultado == "PERDEU":
-            print("💥 Você foi morto pelo Caçador!")
-            jogador.status = "ELIMINADO"
-            msg_morte = {"tipo": "ATUALIZAR_ESTADO", "id": jogador.id, "novo_status": "ELIMINADO"}
-            for pid, p in jogador.tabela_peers.items():
-                if pid != jogador.id: rede.enviar_json(p["ip"], p["porta"], msg_morte)
-                
-        elif consequencia == "VIRAR_ZUMBI" and resultado == "PERDEU":
-            print("🧟 Você foi infectado! Agora você é um ZUMBI.")
-            jogador.papel_secreto = "Zumbi"
-            msg_transf = {"tipo": "ATUALIZAR_ESTADO", "id": jogador.id, "novo_status": "VIVO", "novo_papel": "Zumbi"}
-            for pid, p in jogador.tabela_peers.items():
-                if pid != jogador.id: rede.enviar_json(p["ip"], p["porta"], msg_transf)
-                
-        elif consequencia == "VIRAR_CIVIL" and resultado == "PERDEU":
-            print("💉 Você foi curado pelo Médico! Agora você é um CIVIL.")
-            jogador.papel_secreto = "Civil"
-            msg_transf = {"tipo": "ATUALIZAR_ESTADO", "id": jogador.id, "novo_status": "VIVO", "novo_papel": "Civil"}
-            for pid, p in jogador.tabela_peers.items():
-                if pid != jogador.id: rede.enviar_json(p["ip"], p["porta"], msg_transf)
-                
-    # 7. SINCRONIZAÇÃO DE BARREIRA (Espera todos acabarem a rodada)
-    print("\n🛑 Barreira: Aguardando todos os peers finalizarem a rodada...")
-    # Limpa variáveis para a próxima rodada
-    rede.commit_recebido = None
-    rede.reveal_recebido = None
-    
-    # Avisa todos que eu acabei minha rodada
-    msg_barreira = {"tipo": "FIM_RODADA_PEER", "id": jogador.id}
-    rede.rodada_finalizada_peers.add(jogador.id)
-    for pid, p in jogador.tabela_peers.items():
-        if pid != jogador.id and p["status"] == "VIVO":
-            rede.enviar_json(p["ip"], p["porta"], msg_barreira)
-            
-    # Espera até que todos os VIVOS tenham mandado o aviso de fim de rodada
-    vivos = [pid for pid, d in jogador.tabela_peers.items() if d["status"] == "VIVO"]
-    while not set(vivos).issubset(rede.rodada_finalizada_peers):
-        time.sleep(0.5)
-        
-    rede.rodada_finalizada_peers.clear()
-    print("✅ Todos prontos! Avançando para a próxima rodada...")
-
-
 
 def main():
     print("--- ZOMBIE HUNT P2P ---")
+    if not verificar_se_existe_anfitriao():
+        # Valida o mínimo de 6 jogadores
+        while True:
+            try:
+                total_jogadores = int(input("[Anfitriao] Quantos jogadores terao na partida (minimo 6)? ").strip())
+                if total_jogadores >= 6:
+                    break
+                else:
+                    print("> O jogo exige no minimo 6 jogadores para balanceamento de papeis!")
+            except ValueError:
+                print("> Entrada invalida! Digite um numero inteiro.")
 
-    ja_existe_anfitriao = verificar_se_existe_anfitriao()
-    
-    if not ja_existe_anfitriao:
-        # ==============================================================
-        # CASO 1: Ninguém na rede -> ESSA INSTÂNCIA DE JOGADOR VIRA O ANFITRIÃO
-        # ==============================================================
-        print("> Nenhum lobby encontrado. Você é o PRIMEIRO jogador e assumiu como ANFITRIÃO!")
+        print(f"[SISTEMA] Voce e o Lider (ID 0). Aguardando {total_jogadores - 1} jogadores...")
+        
         jogador = Jogador(IP_LOCAL, PORTA_PADRAO_LOBBY, eh_anfitriao=True)
         rede = GerenciadorDeRede(jogador)
+        jogador.tabela_peers[0] = {"ip": IP_LOCAL, "porta": PORTA_PADRAO_LOBBY, "status": "VIVO"}
         
-        while True:
-            cmd = input("\n> [Anfitrião] Digite 'start' quando estiverem todos prontos para iniciar a partida: ").strip().lower()
-            if cmd == "start":  
-                # Adiciona o próprio anfitrião na tabela
-                jogador.tabela_peers[0] = {
-                    "ip": IP_LOCAL, 
-                    "porta": PORTA_PADRAO_LOBBY, 
-                    "status": "VIVO",
-                }
+        while len(jogador.tabela_peers) < total_jogadores:
+            time.sleep(1)
+            
+        print("[SISTEMA] Todos conectados! Distribuindo papeis e iniciando...")
+        
+        # PROPORÇÃO BALANCEADA PARA 6+ JOGADORES:
+        # Metade Zumbis (3) e Metade Humanos (1 Caçador, 1 Médico, 1 Civil)
+        papeis_base = ["Zumbi", "Zumbi", "Zumbi", "Caçador", "Médico", "Civil"]
+        
+        if total_jogadores > 6:
+            papeis_extras = [random.choice(["Zumbi", "Caçador", "Médico", "Civil"]) for _ in range(total_jogadores - 6)]
+            todos_papeis = papeis_base + papeis_extras
+        else:
+            todos_papeis = list(papeis_base)
+            
+        random.shuffle(todos_papeis)
+        
+        # Atribui ordenadamente para cada ID sequencial (0, 1, 2, 3...)
+        ids_ordenados = sorted(jogador.tabela_peers.keys())
+        
+        for index, pid in enumerate(ids_ordenados):
+            papel_atribuido = todos_papeis[index]
+            dados = jogador.tabela_peers[pid]
+            dados["papel_secreto"] = papel_atribuido
+            dados["papel_conhecido"] = papel_atribuido
+            
+        # Configura o próprio líder (ID 0)
+        jogador.definir_papel(jogador.tabela_peers[0]["papel_secreto"])
+        jogador.tabela_peers[0]["hash_papel"] = jogador.hash_do_papel
 
-                print("\n> Disparando tabela full mesh para todos os nós...")
-                for pid, dados in jogador.tabela_peers.items():
-                    if pid == 0: continue
-                    msg = {
-                        "tipo": "INICIAR_PARTIDA",
-                        "seu_id": pid,
-                        "tabela": jogador.tabela_peers
-                        }
-                    rede.enviar_json(dados["ip"], dados["porta"], msg)
-                break
-                                
-    # ==============================================
-    # CASO 2: Lobby encontrado -> VIRO UM CONVIDADO
-    # ==============================================
+        # Dispara o início para todos
+        for pid, dados in jogador.tabela_peers.items():
+            msg = {
+                "tipo": "INICIAR_PARTIDA", 
+                "seu_id": pid, 
+                "tabela": jogador.tabela_peers,
+                "papel_atribuido": dados["papel_secreto"]
+            }
+            if pid == 0:
+                rede.rotear_evento(msg)
+            else:
+                rede.enviar_json(dados["ip"], dados["porta"], msg)
     else:
-        print("> Lobby encontrado! Conectando-se como CONVIDADO...")
-
-        # Escolhendo uma porta livre aleatória para o convidado não dar conflito (ex: 51234)
-        meu_socket_temporario = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        meu_socket_temporario.bind((IP_LOCAL, 0))
-        sua_porta = meu_socket_temporario.getsockname()[1]
-        meu_socket_temporario.close()
-
-        # print(f"> Porta atribuída ao seu nó: {sua_porta}")
+        temp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        temp.bind((IP_LOCAL, 0))
+        sua_porta = temp.getsockname()[1]
+        temp.close()
+        
         jogador = Jogador(IP_LOCAL, sua_porta, eh_anfitriao=False)
         rede = GerenciadorDeRede(jogador)
-
-        # print(f"> Enviando seu registro e hash ({jogador.hash_do_papel[:8]}...) para o Anfitrião...")
-        # Enviando meu endereço e papel para o anfitrião
-        msg = {
-            "tipo": "ENTRAR_LOBBY",
-            "ip": IP_LOCAL,
-            "porta": sua_porta,
-            "hash_papel": jogador.hash_do_papel
-        }
-        rede.enviar_json(IP_LOCAL, PORTA_PADRAO_LOBBY, msg)
-
-        print("> Aguardando o anfitrião iniciar a partida...")
-        while jogador.id is None:
+        
+        print("[SISTEMA] Conectando ao Lobby e aguardando papeis...")
+        while jogador.id is None or jogador.papel_secreto is None:
+            rede.enviar_json(IP_LOCAL, PORTA_PADRAO_LOBBY, {"tipo": "ENTRAR_LOBBY", "ip": IP_LOCAL, "porta": sua_porta, "hash_papel": jogador.hash_do_papel})
             time.sleep(1)
 
-
-
-
-    # === LOOP PRINCIPAL DE 10 RODADAS ===
     for rodada in range(1, 11):
         executar_rodada(jogador, rede, rodada)
-        
-        # Confere se algum time já venceu
-        fim, msg_fim = MotorDoJogo.verificar_fim_de_jogo(
-            jogador.tabela_peers, jogador.id, jogador.status, jogador.papel_secreto, rodada
-        )
-        print(f"\n📊 Placar da Rodada -> {msg_fim}")
-        if fim:
-            print("\n" + "*"*50)
-            print("🚨 FIM DE JOGO! 🚨")
-            print("*"*50)
-            break
-            
-    print("\n🏁 Partida encerrada! Obrigado por jogar.")
-    sys.exit()
+        fim, msg_fim = MotorDoJogo.verificar_fim_de_jogo(jogador.tabela_peers, jogador.id, jogador.status, jogador.papel_secreto, rodada)
+        print(f"\n------------------------------------------------")
+        print(f"[PLACAR] {msg_fim}")
+        print(f"------------------------------------------------")
 
+        if fim: break
+            
+    print("[SISTEMA] Partida encerrada.")
+    sys.exit()
 
 if __name__ == "__main__":
     main()

@@ -7,45 +7,42 @@ class Jogador:
         self.id = 0 if eh_anfitriao else None
         self.ip = ip
         self.porta = int(porta)
-        self.eh_anfitriao = eh_anfitriao
         self.status = "VIVO"
         
-        # O deck inicial de 1 a 10
+        # [Conceito: Coordenação Centralizada] O nó 0 começa como Coordenador
+        self.id_lider = 0 
+        
         self.deck = list(range(1, 11))
         
-        # Sorteia o papel inicial
-        papeis_possiveis = ["Zumbi", "Caçador", "Médico", "Civil"]
-        self.papel_secreto = random.choice(papeis_possiveis)
-        
-        # Gera a "senha" do papel e o hash para divulgar no início (Protocolo de Segredo)
+        # O papel começa vazio e será definido pelo Líder na inicialização
+        self.papel_secreto = None
         self.senha_do_papel = self._gerar_texto_aleatorio(8)
-        self.hash_do_papel = self.gerar_hash(f"{self.papel_secreto}_{self.senha_do_papel}")
+        self.hash_do_papel = None
         
-        # Tabela Full Mesh: guarda os dados e status dos outros peers da rede
         self.tabela_peers = {}
 
-    # Escolhe uma carta aleatória do deck e remove ela (vai ser adaptado pra pedir input do usuário depois).
+    def definir_papel(self, papel):
+        """Método chamado para atribuir o papel vindo do Líder."""
+        self.papel_secreto = papel
+        self.hash_do_papel = self.gerar_hash(f"{self.papel_secreto}_{self.senha_do_papel}")
+
     def escolher_carta(self):
-        if not self.deck:
-            return None
+        if not self.deck: return None
         carta = random.choice(self.deck)
         self.deck.remove(carta)
         return carta
 
-    # Gera uma palavra aleatória (usada para senhas e salts)
     @staticmethod
     def _gerar_texto_aleatorio(tamanho=6):
         letras = string.ascii_letters + string.digits
         return ''.join(random.choice(letras) for _ in range(tamanho))
 
-    # Função hash SHA-256
     @staticmethod 
     def gerar_hash(texto):
+        # [Conceito: Funções Hash] Garante resistência à colisão e caminho único
         return hashlib.sha256(texto.encode('utf-8')).hexdigest()
 
     def gerar_commit_jogada(self, carta):
-        """Gera o salt temporário da rodada e cria o hash da jogada."""
-        salt_temporario = self._gerar_texto_aleatorio(6)
-        texto_lacrado = f"{carta}_{salt_temporario}"
-        hash_jogada = self.gerar_hash(texto_lacrado)
-        return hash_jogada, salt_temporario
+        salt = self._gerar_texto_aleatorio(6)
+        texto_lacrado = f"{carta}_{salt}"
+        return self.gerar_hash(texto_lacrado), salt
