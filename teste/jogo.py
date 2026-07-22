@@ -20,8 +20,6 @@ class MotorDoJogo:
             consequencia = "MORRER"
         elif p_vencedor == "Médico" and p_perdedor == "Zumbi":
             consequencia = "VIRAR_CIVIL"
-        elif p_vencedor == "Caçador" and p_perdedor in ["Médico", "Civil"]:
-            consequencia = "MORRER"
             
         return ("VENCEU" if vencedor == "A" else "PERDEU"), consequencia
 

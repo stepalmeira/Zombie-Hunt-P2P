@@ -5,8 +5,8 @@ import json
 class GerenciadorDeRede:
     def __init__(self, jogador):
         self.jogador = jogador
-        self.commit_recebido = None
-        self.reveal_recebido = None
+        self.commits_recebidos = {}
+        self.reveals_recebidos = {}
         self.ordem_rodada = None
         self.resultados_rodada = []
         self.tabela_atualizada = False
@@ -88,11 +88,18 @@ class GerenciadorDeRede:
             print(f"> Partida iniciada. Seu ID: {self.jogador.id} | Papel: {self.jogador.papel_secreto} {emoji_papel}")
             print(f"=================================================")
 
-        elif tipo == "ORDEM_RODADA": self.ordem_rodada = msg
-        elif tipo == "PING": pass # Só de o nó receber e aceitar a conexão prova que ele está vivo
-        elif tipo == "COMMIT": self.commit_recebido = msg["hash_jogada"]
-        elif tipo == "REVEAL": self.reveal_recebido = msg
-        elif tipo == "RESULTADO_DUELO": self.resultados_rodada.append(msg)
+        elif tipo == "ORDEM_RODADA":
+            self.ordem_rodada = msg
+        elif tipo == "PING":
+            pass # Só de o nó receber e aceitar a conexão prova que ele está vivo
+        elif tipo == "COMMIT":
+            chave = (msg["rodada"], msg["id_remetente"])
+            self.commits_recebidos[chave] = msg["hash_jogada"]
+        elif tipo == "REVEAL":
+            chave = (msg["rodada"], msg["id_remetente"])
+            self.reveals_recebidos[chave] = msg
+        elif tipo == "RESULTADO_DUELO":
+            self.resultados_rodada.append(msg)
         elif tipo == "ATUALIZAR_TABELA":
             self.jogador.tabela_peers = {int(k): v for k, v in msg["tabela"].items()}
             self.tabela_atualizada = True

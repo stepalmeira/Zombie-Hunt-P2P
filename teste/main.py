@@ -95,62 +95,73 @@ def executar_rodada(jogador, rede, rodada):
         else:
             # Tenta enviar o COMMIT
             hash_jogada, salt = jogador.gerar_commit_jogada(minha_carta)
-            rede.enviar_json(adv_dados["ip"], adv_dados["porta"], {"tipo": "COMMIT", "hash_jogada": hash_jogada})
+            rede.enviar_json(adv_dados["ip"], adv_dados["porta"], {
+                "tipo": "COMMIT",
+                "rodada": rodada,
+                "id_remetente": jogador.id,
+                "hash_jogada": hash_jogada
+            })
             
             # Aguarda COMMIT do oponente
-            while rede.commit_recebido is None:
+            chave = (rodada, meu_adv)
+            while chave not in rede.commits_recebidos:
                 if not rede.esta_vivo(adv_dados["ip"], adv_dados["porta"]):
                     break
                 time.sleep(0.5)
                 
-            if rede.commit_recebido is None:
+            if rede.commits_recebidos is None:
                 print(f"\n[SISTEMA] Oponente (ID {meu_adv}) desconectou! VITORIA POR W.O.!")
                 jogador.tabela_peers[meu_adv]["status"] = "ELIMINADO"
             else:
                 # Tenta enviar o REVEAL
                 rede.enviar_json(adv_dados["ip"], adv_dados["porta"], {
-                    "tipo": "REVEAL", 
-                    "carta": minha_carta, 
-                    "salt": salt, 
+                    "tipo": "REVEAL",
+                    "rodada": rodada,
+                    "id_remetente": jogador.id,
+                    "carta": minha_carta,
+                    "salt": salt,
                     "papel": jogador.papel_secreto
                 })
                 
-                while rede.reveal_recebido is None:
-                    if not rede.esta_vivo(adv_dados["ip"], adv_dados["porta"]):
-                        break
-                    time.sleep(0.5)
+            while chave not in rede.reveals_recebidos:
+                if not rede.esta_vivo(adv_dados["ip"], adv_dados["porta"]):
+                    break
+                time.sleep(0.5)
+
+            if chave not in rede.reveals_recebidos:
+                print(f"\n[SISTEMA] Oponente (ID {meu_adv}) desconectou! VITORIA POR W.O.!")
+                jogador.tabela_peers[meu_adv]["status"] = "ELIMINADO"
+
+            else:
+                adv_reveal = rede.reveals_recebidos.pop(chave)
                     
-                adv_reveal = rede.reveal_recebido
-                rede.commit_recebido = rede.reveal_recebido = None
-                
-                if adv_reveal:
-                    res, consq = MotorDoJogo.resolver_combate(jogador.papel_secreto, adv_reveal["papel"], minha_carta, adv_reveal["carta"])
-                    
+                res, consq = MotorDoJogo.resolver_combate(jogador.papel_secreto,adv_reveal["papel"],minha_carta,adv_reveal["carta"])
+    
                     # Constrói mensagem de texto amigável baseada na consequência
-                    msg_consequencia = ""
-                    if res == "PERDEU":
-                        if consq == "MORRER": 
-                            jogador.status = "ELIMINADO"
-                            msg_consequencia = "Voce foi eliminado da partida!"
-                        elif consq == "VIRAR_ZUMBI": 
-                            jogador.papel_secreto = "Zumbi"
-                            msg_consequencia = "Voce foi infectado e agora e um Zumbi! 🧟"
-                        elif consq == "VIRAR_CIVIL": 
-                            jogador.papel_secreto = "Civil"
-                            msg_consequencia = "Acorda, cara!! Voce foi curado pelo medico e agora e um civil! 🧍"
-                        else:
-                            msg_consequencia = "Mas nao se preocupe, voce continua vivo e nao foi afetado."
-                    elif res == "VENCEU":
-                        if consq == "MORRER":
-                            msg_consequencia = "Arrasou! Voce atacou um Zumbi e ele foi eliminado"
-                        elif consq == "VIRAR_ZUMBI":
-                            msg_consequencia = "Voce infectou o oponente! Agora ele virou zumbi! 🧟"
-                        elif consq == "VIRAR_CIVIL":
-                            msg_consequencia = "Arrasou! Voce curou um zumbi! Agora ele eh um civil! 🩺"
-                        else:
-                            msg_consequencia = "Sua vitoria foi limpa e sem alteracoes de papéis."
-                    else:  # EMPATOU
-                        msg_consequencia = "Cartas iguais! Nada mudou nesta rodada."
+                msg_consequencia = ""
+                if res == "PERDEU":
+                    if consq == "MORRER": 
+                        jogador.status = "ELIMINADO"
+                        msg_consequencia = "Voce foi eliminado da partida!"
+                    elif consq == "VIRAR_ZUMBI": 
+                        jogador.papel_secreto = "Zumbi"
+                        msg_consequencia = "Voce foi infectado e agora e um Zumbi! 🧟"
+                    elif consq == "VIRAR_CIVIL": 
+                        jogador.papel_secreto = "Civil"
+                        msg_consequencia = "Acorda, cara!! Voce foi curado pelo medico e agora e um civil! 🧍"
+                    else:
+                        msg_consequencia = "Mas nao se preocupe, voce continua vivo e nao foi afetado."
+                elif res == "VENCEU":
+                    if consq == "MORRER":
+                        msg_consequencia = "Arrasou! Voce atacou um Zumbi e ele foi eliminado"
+                    elif consq == "VIRAR_ZUMBI":
+                        msg_consequencia = "Voce infectou o oponente! Agora ele virou zumbi! 🧟"
+                    elif consq == "VIRAR_CIVIL":
+                        msg_consequencia = "Arrasou! Voce curou um zumbi! Agora ele eh um civil! 🧍"
+                    else:
+                        msg_consequencia = "Sua vitoria foi limpa e sem alteracoes de papéis."
+                else:  # EMPATOU
+                    msg_consequencia = "Cartas iguais! Nada mudou nesta rodada."
                     
                     print(f"\n> RESULTADO: Voce {res} o duelo! (Sua: {minha_carta} | Oponente: {adv_reveal['carta']})")
                     print(f"> {msg_consequencia}")
