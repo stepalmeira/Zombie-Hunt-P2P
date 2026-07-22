@@ -29,15 +29,16 @@ class MotorDoJogo:
             return True, "[FIM] Limite de 10 rodadas atingido."
             
         zumbis = humanos = 0
-        if meu_status == "VIVO":
-            if meu_papel == "Zumbi": zumbis += 1
-            else: humanos += 1
-            
-        for p in tabela_peers.values():
+        # Iteramos pelos peers considerando cada um exatamente uma vez
+        for pid, p in tabela_peers.items():
             if p["status"] == "VIVO":
-                papel = p.get("papel_conhecido", "Civil")
-                if papel == "Zumbi": zumbis += 1
-                else: humanos += 1
+                # Se for o próprio jogador, usa o papel local garantidamente atualizado
+                papel = meu_papel if pid == meu_id else p.get("papel_conhecido", "Civil")
+                
+                if papel == "Zumbi": 
+                    zumbis += 1
+                else: 
+                    humanos += 1
                 
         if zumbis == 0: return True, "[VITORIA] HUMANOS VENCERAM!"
         if humanos == 0: return True, "[VITORIA] ZUMBIS VENCERAM!"
