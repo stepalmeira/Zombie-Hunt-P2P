@@ -31,6 +31,8 @@ def iniciar_eleicao(jogador, rede):
     jogador.id_lider = novo_lider
     print(f"[ELEICAO] Novo lider eleito: ID {novo_lider}")
 
+
+
 def executar_rodada(jogador, rede, rodada):
     print(f"\n--- RODADA {rodada} --- Suas Cartas: {jogador.deck}")
     
@@ -123,10 +125,10 @@ def executar_rodada(jogador, rede, rodada):
                     "papel": jogador.papel_secreto
                 })
                 
-            while chave not in rede.reveals_recebidos:
-                if not rede.esta_vivo(adv_dados["ip"], adv_dados["porta"]):
-                    break
-                time.sleep(0.5)
+                while chave not in rede.reveals_recebidos:
+                    if not rede.esta_vivo(adv_dados["ip"], adv_dados["porta"]):
+                        break
+                    time.sleep(0.5)
 
             if chave not in rede.reveals_recebidos:
                 print(f"\n[SISTEMA] Oponente (ID {meu_adv}) desconectou! VITORIA POR W.O.!")
@@ -137,7 +139,7 @@ def executar_rodada(jogador, rede, rodada):
                     
                 res, consq = MotorDoJogo.resolver_combate(jogador.papel_secreto,adv_reveal["papel"],minha_carta,adv_reveal["carta"])
     
-                    # Constrói mensagem de texto amigável baseada na consequência
+                # Constrói mensagem de texto amigável baseada na consequência
                 msg_consequencia = ""
                 if res == "PERDEU":
                     if consq == "MORRER": 
@@ -163,8 +165,8 @@ def executar_rodada(jogador, rede, rodada):
                 else:  # EMPATOU
                     msg_consequencia = "Cartas iguais! Nada mudou nesta rodada."
                     
-                    print(f"\n> RESULTADO: Voce {res} o duelo! (Sua: {minha_carta} | Oponente: {adv_reveal['carta']})")
-                    print(f"> {msg_consequencia}")
+                print(f"\n> RESULTADO: Voce {res} o duelo! (Sua: {minha_carta} | Oponente: {adv_reveal['carta']})")
+                print(f"> {msg_consequencia}")
                     
     # 4. SINCRONIZAÇÃO DE BARREIRA
     resultado_parcial = {"id": jogador.id, "status": jogador.status, "papel": jogador.papel_secreto}
