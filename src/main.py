@@ -1,134 +1,55 @@
 import sys
-from network.peer import Peer
+import socket
+from jogador import Jogador
+from rede import GerenciadorDeRede
+from jogo import MotorDoJogo
+from eleicao import GerenciadorDeEleicao
+from lobby import GerenciadorDeLobby
+from rodada import GerenciadorDeRodada
 
+IP_LOCAL = "127.0.0.1"
+PORTA_PADRAO_LOBBY = 5000
 
 def main():
-    if len(sys.argv) < 4:
+    print("--- ZOMBIE HUNT P2P ---")
+    
+    # 1. Instancia os gerenciadores de serviço
+    eleicao = GerenciadorDeEleicao()
+    lobby = GerenciadorDeLobby(IP_LOCAL, PORTA_PADRAO_LOBBY)
+    rodada_exec = GerenciadorDeRodada(IP_LOCAL, eleicao)
 
-        print(
-            "Usage:"
+    # 2. Inicialização de Jogador e Rede
+    if not lobby.existe_anfitriao():
+        jogador = Jogador(IP_LOCAL, PORTA_PADRAO_LOBBY, eh_anfitriao=True)
+        rede = GerenciadorDeRede(jogador)
+        lobby.criar_sala(jogador, rede)
+    else:
+        # Descobre uma porta livre aleatória para o peer cliente
+        temp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        temp.bind((IP_LOCAL, 0))
+        sua_porta = temp.getsockname()[1]
+        temp.close()
+        
+        jogador = Jogador(IP_LOCAL, sua_porta, eh_anfitriao=False)
+        rede = GerenciadorDeRede(jogador)
+        lobby.entrar_na_sala(jogador, rede)
+
+    # 3. Loop principal do jogo
+    for num_rodada in range(1, 11):
+        rodada_exec.executar(jogador, rede, num_rodada)
+        
+        fim, msg_fim = MotorDoJogo.verificar_fim_de_jogo(
+            jogador.tabela_peers, jogador.id, jogador.status, jogador.papel_secreto, num_rodada
         )
+        print(f"\n------------------------------------------------")
+        print(f"[PLACAR] {msg_fim}")
+        print(f"------------------------------------------------")
 
-        print(
-            "python main.py "
-            "<peer_id> "
-            "<player_name> "
-            "<port>"
-        )
-
-        return
-
-    peer_id = int(sys.argv[1])
-    player_name = sys.argv[2]
-    port = int(sys.argv[3])
-
-    peer = Peer(
-        peer_id=peer_id,
-        player_name=player_name,
-        port=port
-    )
-
-    # ======================================
-    # FULL MESH MANUAL
-    # ======================================
-
-    # exemplo:
-    #
-    # peer 1 conhece 2 e 3
-    # peer 2 conhece 1 e 3
-    # etc
-
-    known_peers = {
-
-        1: ("localhost", 5001),
-        2: ("localhost", 5002),
-        3: ("localhost", 5003),
-        4: ("localhost", 5004)
-
-    }
-
-    for other_peer_id, addr in known_peers.items():
-
-        if other_peer_id == peer_id:
-            continue
-
-        peer.network.add_peer(
-            other_peer_id,
-            addr[0],
-            addr[1]
-        )
-
-    peer.start()
-
-    print(
-        f"\nPlayer {player_name} started "
-        f"on port {port}"
-    )
-
-    # ======================================
-    # LOOP PRINCIPAL
-    # ======================================
-
-    while True:
-
-        print("\n===== MENU =====")
-
-        print("1 - Show State")
-        print("2 - Generate Pairings")
-        print("3 - Play Card")
-        print("4 - Exit")
-
-        choice = input("> ")
-
-        # ======================================
-        # SHOW STATE
-        # ======================================
-
-        if choice == "1":
-
-            peer.print_state()
-
-        # ======================================
-        # GENERATE PAIRS
-        # ======================================
-
-        elif choice == "2":
-
-            pairs = peer.generate_pairings()
-
-            print("\nPairs:")
-
-            for pair in pairs:
-
-                print(pair)
-
-        # ======================================
-        # PLAY CARD
-        # ======================================
-
-        elif choice == "3":
-
-            target_id = int(
-                input("Target player id: ")
-            )
-
-            card = int(
-                input("Card to play: ")
-            )
-
-            peer.play_card(
-                card,
-                target_id
-            )
-
-        # ======================================
-        # EXIT
-        # ======================================
-
-        elif choice == "4":
-            print("Closing peer...")
+        if fim: 
             break
-
+            
+    print("[SISTEMA] Partida encerrada.")
+    sys.exit()
 
 if __name__ == "__main__":
     main()
