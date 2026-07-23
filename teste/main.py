@@ -69,7 +69,7 @@ def executar_rodada(jogador, rede, rodada):
         
     # 3. DUELO P2P
     if jogador.id == ordem["folga"] or jogador.status != "VIVO" or meu_adv is None:
-        print("> Voce esta de folga ou eliminado nesta rodada.")
+        print("> Relaxa! Voce esta de folga nesta rodada")
     else:
         adv_dados = jogador.tabela_peers[meu_adv] if meu_adv != jogador.id else {"ip": IP_LOCAL, "porta": jogador.porta}
         print(f"> DUELO: Voce (ID {jogador.id}) vs ID {meu_adv}")
@@ -161,7 +161,7 @@ def executar_rodada(jogador, rede, rodada):
                     elif consq == "VIRAR_CIVIL":
                         msg_consequencia = "Arrasou! Voce curou um zumbi! Agora ele eh um civil! 🧍"
                     else:
-                        msg_consequencia = "Sua vitoria foi limpa e sem alteracoes de papéis."
+                        msg_consequencia = "Voce venceu e continua no seu papel"
                 else:  # EMPATOU
                     msg_consequencia = "Cartas iguais! Nada mudou nesta rodada."
                     
