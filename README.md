@@ -13,7 +13,7 @@ Um número N de participantes se conectam simultaneamente. Para cada participant
 - **Caçador vence de Zumbi** → O zumbi morre.
 - **Médico vence de Zumbi** → O zumbi se torna Civil.
 - **Civil vence qualquer um (Zumbi/Médico/Caçador/Civil)** → Nada acontece, ambos permanecem vivos.
-- **Caçador vence outro Humano (Médico/Civil)** → O Médico/Civil morre.
+- **Caçador vence outro Humano (Médico/Civil)** → Nada acontece, ambos permanecem vivos.
 - **Médico vence outro Humano (Civil/Caçador)** → Nada acontece, ambos permanecem vivos.
 - **Dois jogadores do mesmo papel se enfrentam** → O perdedor perde apenas a carta jogada. (exemplo: Zumbi vs Zumbi ou Caçador vs Caçador resulta apenas em perda de carta).
 
@@ -27,7 +27,7 @@ Caso ambos joguem cartas do mesmo valor, ninguém vence a rodada, apenas perdem 
 ---
 
 ## 🏗️ Arquitetura
-- **Arquitetura:** O sistema seguirá o modelo peer-to-peer (P2P), ou seja, sem servidor central. Cada jogador atua como cliente e servidor ao mesmo tempo. Usaremos uma arquitetura **P2P não-estruturada** com uma topologia de rede de **Full mesh/malha completa**, ou seja, durante o jogo todos os peers se conectam diretamente com todos. Para implementar isso usaremos uma tabela para guardar os dados e status dos outros peers da rede.
+- **Arquitetura:** O sistema seguirá o modelo peer-to-peer (P2P), ou seja, sem servidor central. Cada jogador atua como cliente e servidor ao mesmo tempo. Usaremos uma arquitetura **P2P** com uma topologia de rede de **Full mesh/malha completa**, ou seja, durante o jogo todos os peers se conectam diretamente com todos. Para implementar isso usaremos uma tabela para guardar os dados e status dos outros peers da rede.
 - **Arquitetura de Software:** O sistema é estruturado em **4 camadas** distribuídas em **7 módulos principais**:
 
   - **1. Aplicação & Orquestração**
@@ -43,14 +43,13 @@ Caso ambos joguem cartas do mesmo valor, ninguém vence a rodada, apenas perdem 
     - `rede.py` (GerenciadorDeRede) → Camada de baixo nível responsável por sockets TCP, concorrência com threads, envio/recebimento de JSON e controle de timeouts.
 
   - **4. Modelo de Estado**
-    - `jogador.py` (Jogador) → Entidade principal do nó local. Armazena a identidade do jogador (IP, porta, ID), status (vivo/morto), papel secreto e a tabela de peers.
+    - `jogador.py` (`Jogador) → Entidade principal do nó local. Armazena a identidade do jogador (IP, porta, ID), status (vivo/morto), papel secreto e a tabela de peers.
 
 ## 🗣️ Comunicação
 - **Tipo de comunicação:** TCP para garantir a entrega das mensagens.
 - Envio das mensagens pela rede será **assíncrono**, ou seja, não bloqueante.
 - Usaremos **conexões duradouras** entre os nós durante toda a partida.
 - O **formato de mensagens** entre os peers (estado do jogo, ataque, etc) será **JSON**.
-
 
 
 ## 🧵 Processos
