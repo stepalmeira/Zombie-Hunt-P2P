@@ -28,11 +28,22 @@ Caso ambos joguem cartas do mesmo valor, ninguém vence a rodada, apenas perdem 
 
 ## 🏗️ Arquitetura
 - **Arquitetura:** O sistema seguirá o modelo peer-to-peer (P2P), ou seja, sem servidor central. Cada jogador atua como cliente e servidor ao mesmo tempo. Usaremos uma arquitetura **P2P não-estruturada** com uma topologia de rede de **Full mesh/malha completa**, ou seja, durante o jogo todos os peers se conectam diretamente com todos. Para implementar isso usaremos uma tabela para guardar os dados e status dos outros peers da rede.
-- **Arquitetura de Software:** Dividiremos em módulos:
-    - **Jogador** → Classe contendo atributos e métodos do jogador (id, papel, deck de cartas, etc)  
-    - **Jogo** → Lógica do jogo
-    - **Rede** → Logica de conexão e comunicação entre peers (sockets TCP, threads, envios de JSON e timeouts)
+- **Arquitetura de Software:** O sistema é estruturado em **4 camadas** distribuídas em **7 módulos principais**:
 
+  - **1. Aplicação & Orquestração**
+    - `main.py` → Entrypoint do programa. Inicializa os serviços, define a porta de execução (anfitrião ou cliente) e orquestra o loop principal das rodadas e encerramento.
+
+  - **2. Lógica de Jogo**
+    - `rodada.py` (GerenciadorDeRodada) → Controla a dinâmica, a sincronização de fases e a sequência de ações a cada rodada da partida.
+    - `jogo.py` (MotorDoJogo) → Regras puras da partida, incluindo a validação de regras e verificação das condições de vitória/fim de jogo.
+
+  - **3. Infraestrutura & Comunicação P2P**
+    - `lobby.py` (GerenciadorDeLobby) → Responsável pela descoberta da rede, verificação de anfitrião existente e entrada de novos peers na sala.
+    - `eleicao.py` (GerenciadorDeEleicao) → Implementa o algoritmo de consenso distribuído para votações secretas e reeleição do coordenador em caso de falhas.
+    - `rede.py` (GerenciadorDeRede) → Camada de baixo nível responsável por sockets TCP, concorrência com threads, envio/recebimento de JSON e controle de timeouts.
+
+  - **4. Modelo de Estado**
+    - `jogador.py` (Jogador) → Entidade principal do nó local. Armazena a identidade do jogador (IP, porta, ID), status (vivo/morto), papel secreto e a tabela de peers.
 
 ## 🗣️ Comunicação
 - **Tipo de comunicação:** TCP para garantir a entrega das mensagens.
@@ -49,7 +60,6 @@ Caso ambos joguem cartas do mesmo valor, ninguém vence a rodada, apenas perdem 
 
 ## 🕑️ Coordenação
 - Vamos usar o método de **sincronização de barreira** para **sincronizar** os resultados das batalhas ao final de cada rodada, garantindo que o jogo só passa pra rodada 2 depois que todos terminarem os duelos da rodada 1.
-- Usaremos um **algoritmo de consenso decentralizado baseado em semente**: Cada peer gera um valor aleatório que é somado e, do valor resultante (a semente), é calculado o módulo, que garantidamente será um valor entre 0 e N-1 (sendo N o número de jogadores da partida), permitindo selecionar um jogador de forma aleatória e confiável.
 
 
 ## ☝️ Nomeação
@@ -61,24 +71,16 @@ Caso ambos joguem cartas do mesmo valor, ninguém vence a rodada, apenas perdem 
 - O estado do jogo é **completamente replicado** em todos os nós, ou seja, todos têm uma copia exata do estado do jogo.
 - Para manter os **papéis em segredo sem violar a replicação**, cada peer criptografa seu papel inicial com uma palavra secreta (senha) e distribui o dado criptografado para a rede. *O estado é replicado para todos, mas só é descriptografado localmente pelos outros peers quando um jogador morre, se transforma, ou precisa revelar seu papel durante a resolução de uma batalha.*
 - Para garantir a **consistência**, ao final de cada rodada, todos os peers trocam informações de quem morreu ou está vivo. Todos devem atualizar suas informações antes da próxima rodada começar.
-- 
 
 ## 🚧 Tolerância a falhas
-- Utilizaremos **timeouts** para evitar que a queda ou lentidão não congele a partida. Se um jogador não enviar sua carta dentro do tempo limite da jogada, o adversário vence por WO (sem gastar nenhuma carta de seu deck) e a queda é reportada pra rede.
-- Em caso de **crash** (peer desconectar no meio da partida), o sistema marca o jogador como “Eliminado” se der timeout.
-- Para lidar com **falhas bizantinas**, aplicamos o protocolo "Commit-Reveal": No momento do duelo, assim que um jogador escolhe sua carta, é gerada localmente uma palavra aleatória (salt) que é combinada ao valor da carta escolhida e passada por uma função de hash (gerando um código único inacessível), que é então enviado para o adversário. Apenas após os dois jogadores já terem recebido esse código um do outro, o valor real da carta e o salt de cada um são revelados para o oponente, que valida a jogada (recalculando o hash) e revela o vencedor do duelo sem risco de manipulação por parte de um peer malicioso.
+- **Falhas de crash**
+  - **Queda de oponente →** Se o adversário cai durante o duelo, o peer sobrevivente vence automaticamente por W.O.
+  - **Queda do Líder →** Eleição automática transfere as responsabilidades ao próximo menor ID ativo (algoritmo de bully) 
 
-<!--
+- **Falhas bizantinas (Commit-Reveal Scheme):**
+  - **Commit:** Envio do hash SHA-256(carta + salt) para lacrar a escolha
+  - **Reveal:** Envio da carta original, salt e papel secreto para verificação
 
-## 📦 Dependências de software
-
-#### Backend
-- Python
-
-#### Frontend
-- [...]
-
--->
 ---
 
 ## 👨‍💻 Autores
